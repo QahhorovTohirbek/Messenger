@@ -1,12 +1,12 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework import generics
 from rest_framework.authentication import BasicAuthentication, SessionAuthentication, TokenAuthentication
 from django.contrib.auth.hashers import make_password
 from . import permissions as permission
 from . import serializers
 from chat import models
-
 
 
 
@@ -53,6 +53,13 @@ def user_update(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+class UserList(generics.ListAPIView):
+    queryset = models.User.objects.all()
+    serializer_class = serializers.UserSerializerList
+    permission_classes = [permissions.IsAuthenticated]
+
+
+
 
 @api_view(['POST', 'GET'])
 @authentication_classes([BasicAuthentication, SessionAuthentication])
@@ -74,3 +81,49 @@ def group_create(request):
     return Response({
         'created': True
     })
+
+
+@api_view(['PUT', 'GET'])
+@authentication_classes([BasicAuthentication, SessionAuthentication])
+@permission_classes([permission.IsGroupOwner])
+def group_update(request, code):
+    group = models.Group.objects.get(code=code)
+    if group.author == request.user:
+        group.name = request.data.get('name', group.name)
+        group.avatar = request.data.get('avatar', group.avatar)
+        group.description = request.data.get('description', group.description)
+        group.save()
+        return Response({'group_update': 'success'})
+    else:
+        return Response({'group_update': 'fail'})
+    
+
+class GroupList(generics.ListAPIView):
+    queryset = models.Group.objects.all()
+    serializer_class = serializers.GroupSerializerList
+    permission_classes = [permission.IsGroupOwner]
+
+
+
+class GroupMemberCreate(generics.CreateAPIView):
+    queryset = models.GroupMember.objects.all()
+    serializer_class = serializers.GroupMemberSerializerCreate
+    permission_classes = [permission.IsGroupOwner]
+
+    def perform_create(self, serializer):
+        group_code = self.kwargs.get('group_code')
+        group = models.Group.objects.get(code=group_code)
+        user = self.request.user
+        serializer.save(group=group, user=user)
+        
+
+class GroupMemberList(generics.ListAPIView):
+    queryset = models.GroupMembers.objects.all()
+    serializer_class = serializers.GroupMembersSerializerList
+    permission_classes = [permission.IsGroupOwner]
+
+
+class GroupMemberDetail(generics.RetrieveAPIView):
+    queryset = models.GroupMembers.objects.all()
+    serializer_class = serializers.GroupMembersSerializerList
+    permission_classes = [permission.IsGroupOwner]
